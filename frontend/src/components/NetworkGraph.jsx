@@ -249,28 +249,21 @@ function NetworkGraph({ elements }) {
       window.addEventListener('exportGraphPNG', handleExportPNG)
 
       // --- Node pulsing entry animation ---
-      const pulseIntervals = new Map()
+      const pulseTimeouts = new Map()
 
       const startPulsing = () => {
         const nodes = cy.nodes()
         nodes.forEach((n, i) => {
           const delay = i * 80
-          // Stagger initial pulses for premium feel
+          // Stagger a single pulse per node on initial layout
           const start = setTimeout(() => {
-            // initial pulse
             n.addClass('pulse')
-            setTimeout(() => n.removeClass('pulse'), 600)
-
-            // then periodic pulsing
-            const id = setInterval(() => {
-              n.addClass('pulse')
-              setTimeout(() => n.removeClass('pulse'), 600)
-            }, 1200)
-
-            pulseIntervals.set(n.id(), id)
+            // remove pulse after animation duration
+            const end = setTimeout(() => n.removeClass('pulse'), 700)
+            pulseTimeouts.set(`${n.id()}_end`, end)
           }, delay)
 
-          pulseIntervals.set(`${n.id()}_start`, start)
+          pulseTimeouts.set(`${n.id()}_start`, start)
         })
       }
 
@@ -282,14 +275,9 @@ function NetworkGraph({ elements }) {
         try {
           cy.removeListener('layoutstop', startPulsing)
         } catch (e) {}
-        // Clear any active intervals/timeouts
-        for (const [k, v] of pulseIntervals.entries()) {
-          try {
-            clearInterval(v)
-          } catch (e) {}
-          try {
-            clearTimeout(v)
-          } catch (e) {}
+        // Clear any active timeouts
+        for (const [k, v] of pulseTimeouts.entries()) {
+          try { clearTimeout(v) } catch (e) {}
         }
       }
     }
