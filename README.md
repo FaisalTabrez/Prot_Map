@@ -349,6 +349,50 @@ Densely connected protein clusters representing functional units:
 
 ---
 
+## Test Result Example — Breast Cancer
+
+This section provides a representative test run using the bundled "Breast Cancer" example dataset. Values shown are illustrative and will vary depending on STRING DB responses at query time.
+
+- Input
+  - Disease: `Breast Cancer`
+  - Genes (example subset): `TP53, BRCA1, BRCA2, EGFR, ERBB2, ESR1, PIK3CA, AKT1, PTEN, MYC`
+  - Confidence threshold: `0.4`
+
+- Representative Output Summary
+  - Total nodes: 27
+  - Total edges: 56
+  - Functional modules detected: 5
+  - Genes not found in STRING DB: `[]`
+
+- Example Top Hubs (degree)
+  - `TP53` — degree: 12
+  - `BRCA1` — degree: 10
+  - `BRCA2` — degree: 9
+
+- Example Top Bottlenecks (betweenness)
+  - `TP53`, `EGFR`, `AKT1`
+
+Sample JSON excerpt (abbreviated):
+```json
+{
+  "elements": [
+    {"data": {"id": "TP53", "label": "TP53", "degree": 0.44, "betweenness": 0.12, "module": 0}},
+    {"data": {"source": "TP53", "target": "BRCA1", "score": 0.98}}
+  ],
+  "stats": {"total_nodes": 27, "total_edges": 56, "modules_detected": 5}
+}
+```
+
+CSV nodes excerpt (abbreviated):
+```
+id,label,degree,betweenness,module
+TP53,TP53,0.44,0.12,0
+BRCA1,BRCA1,0.36,0.08,0
+BRCA2,BRCA2,0.32,0.07,0
+```
+
+Notes: Use the CSV/JSON exports for reproducible downstream analysis in R or Python. Actual counts and scores depend on the STRING DB responses and the confidence threshold.
+
 ## Technical Details
 
 ### Backend Stack (Python/FastAPI)
