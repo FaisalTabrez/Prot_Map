@@ -148,6 +148,18 @@ function NetworkGraph({ elements }) {
         'shadow-opacity': 0.6
       }
     }
+    ,
+    // Pulse class used for entry animation (pulsing glow)
+    {
+      selector: 'node.pulse',
+      style: {
+        'shadow-blur': 60,
+        'shadow-color': '#FFD60A',
+        'shadow-opacity': 1,
+        'border-color': '#ffffff',
+        'border-width': 3
+      }
+    }
   ]
 
   /**
@@ -236,8 +248,49 @@ function NetworkGraph({ elements }) {
 
       window.addEventListener('exportGraphPNG', handleExportPNG)
 
+      // --- Node pulsing entry animation ---
+      const pulseIntervals = new Map()
+
+      const startPulsing = () => {
+        const nodes = cy.nodes()
+        nodes.forEach((n, i) => {
+          const delay = i * 80
+          // Stagger initial pulses for premium feel
+          const start = setTimeout(() => {
+            // initial pulse
+            n.addClass('pulse')
+            setTimeout(() => n.removeClass('pulse'), 600)
+
+            // then periodic pulsing
+            const id = setInterval(() => {
+              n.addClass('pulse')
+              setTimeout(() => n.removeClass('pulse'), 600)
+            }, 1200)
+
+            pulseIntervals.set(n.id(), id)
+          }, delay)
+
+          pulseIntervals.set(`${n.id()}_start`, start)
+        })
+      }
+
+      // Start pulsing after layout finishes (so nodes are in place)
+      cy.on('layoutstop', startPulsing)
+
       return () => {
         window.removeEventListener('exportGraphPNG', handleExportPNG)
+        try {
+          cy.removeListener('layoutstop', startPulsing)
+        } catch (e) {}
+        // Clear any active intervals/timeouts
+        for (const [k, v] of pulseIntervals.entries()) {
+          try {
+            clearInterval(v)
+          } catch (e) {}
+          try {
+            clearTimeout(v)
+          } catch (e) {}
+        }
       }
     }
   }, [elements])
