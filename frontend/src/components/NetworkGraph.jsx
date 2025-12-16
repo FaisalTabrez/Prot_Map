@@ -5,29 +5,46 @@ import { ZoomIn, ZoomOut, Maximize2 } from 'lucide-react'
 import ProteinDetailsModal from './ProteinDetailsModal'
 
 /**
- * NetworkGraph Component - Dark Theme Edition
- * ============================================
+ * NetworkGraph Component - Dark Theme Edition with Database-Driven Coloring
+ * ==========================================================================
  * Renders an interactive PPI network using Cytoscape.js with cyber-biology aesthetics
  * 
  * Visual Encoding:
  * - Node Size: Proportional to degree centrality (hub proteins are larger)
- * - Node Color: Mapped to module/cluster ID (functional grouping)
+ * - Node Color: Mapped to biological function from SQL database
  * - Layout: COSE (physics-based) for natural clustering
  */
 
-// Vibrant color palette for dark theme
+// Biological function color palette (Neon/Glossy style for dark theme)
+const FUNCTION_COLORS = {
+  'Tumor Suppressor': '#ff3333',      // Neon Red
+  'Oncogene': '#00ff88',              // Neon Green
+  'Kinase': '#ffaa00',                // Neon Orange
+  'Transcription Factor': '#bc13fe',  // Neon Purple
+  'Unknown': '#64748b',               // Slate Grey (fallback)
+}
+
+// Fallback module colors for uncategorized genes
 const MODULE_COLORS = [
-  '#10B981', // Emerald
-  '#3B82F6', // Blue
-  '#8B5CF6', // Purple
-  '#F59E0B', // Amber
-  '#EC4899', // Pink
-  '#06B6D4', // Cyan
-  '#EF4444', // Red
-  '#6366F1', // Indigo
-  '#14B8A6', // Teal
-  '#F97316', // Orange
+  '#4CC9F0', // Neon Cyan
+  '#F72585', // Neon Pink
+  '#7209B7', // Purple
 ]
+
+/**
+ * Get node color based on biological function category from database
+ * Falls back to module-based coloring if category is Unknown
+ */
+function getNodeColor(category, moduleId) {
+  if (category && category !== 'Unknown' && FUNCTION_COLORS[category]) {
+    return FUNCTION_COLORS[category]
+  }
+  // Fallback to module-based coloring
+  if (moduleId !== undefined && moduleId < MODULE_COLORS.length) {
+    return MODULE_COLORS[moduleId]
+  }
+  return FUNCTION_COLORS['Unknown']
+}
 
 function NetworkGraph({ elements }) {
   const cyRef = useRef(null)
@@ -60,13 +77,11 @@ function NetworkGraph({ elements }) {
           return Math.max(35, Math.min(90, 35 + degree * 120))
         },
 
-        // Color mapping: strictly by module (cluster ID)
+        // Color mapping: use category from database, fallback to module
         'background-color': (ele) => {
-          const mod = ele.data('module')
-          if (mod === 0) return '#4CC9F0' // Neon Cyan - DNA Repair
-          if (mod === 1) return '#F72585' // Neon Pink - Cell Growth
-          if (mod === 2) return '#7209B7' // Neon Purple
-          return '#64748b' // Slate Grey - unclustered nodes
+          const category = ele.data('category')
+          const moduleId = ele.data('module')
+          return getNodeColor(category, moduleId)
         },
 
         // Glossy white highlight border
@@ -80,11 +95,9 @@ function NetworkGraph({ elements }) {
           return 10 + Math.min(40, Math.floor(degree * 50))
         },
         'shadow-color': (ele) => {
-          const mod = ele.data('module')
-          if (mod === 0) return '#4CC9F0'
-          if (mod === 1) return '#F72585'
-          if (mod === 2) return '#7209B7'
-          return '#64748b'
+          const category = ele.data('category')
+          const moduleId = ele.data('module')
+          return getNodeColor(category, moduleId)
         },
         'shadow-opacity': 0.85,
       }
@@ -349,25 +362,28 @@ function NetworkGraph({ elements }) {
         </motion.button>
       </div>
 
-      {/* Legend */}
-      <div className="absolute top-6 left-6 bg-slate-900/80 backdrop-blur-xl border border-slate-700/50 rounded-lg p-4 shadow-lg max-w-xs">
-        <h4 className="text-sm font-bold text-slate-200 mb-3">Visual Guide</h4>
-        <div className="space-y-2 text-xs text-slate-400">
+      {/* Function-Based Color Legend */}
+      <div className="absolute bottom-4 left-4 bg-black/50 backdrop-blur-lg border border-white/10 rounded-lg p-3 shadow-2xl">
+        <h4 className="text-xs font-bold text-white/90 mb-2">Gene Functions</h4>
+        <div className="space-y-1.5 text-xs">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-lg shadow-emerald-500/50"></div>
-            <span>Larger nodes = More connections (Hubs)</span>
+            <div className="w-3 h-3 rounded-full shadow-lg" style={{ backgroundColor: FUNCTION_COLORS.TUMOR_SUPPRESSOR, boxShadow: `0 0 8px ${FUNCTION_COLORS.TUMOR_SUPPRESSOR}` }}></div>
+            <span className="text-white/80">Tumor Suppressor / DNA Repair</span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="flex gap-1">
-              <div className="w-3 h-3 rounded-full" style={{ backgroundColor: MODULE_COLORS[0] }}></div>
-              <div className="w-3 h-3 rounded-full" style={{ backgroundColor: MODULE_COLORS[1] }}></div>
-              <div className="w-3 h-3 rounded-full" style={{ backgroundColor: MODULE_COLORS[2] }}></div>
-              <div className="w-3 h-3 rounded-full" style={{ backgroundColor: MODULE_COLORS[3] }}></div>
-            </div>
-            <span>Colors = Functional modules</span>
+            <div className="w-3 h-3 rounded-full shadow-lg" style={{ backgroundColor: FUNCTION_COLORS.ONCOGENE, boxShadow: `0 0 8px ${FUNCTION_COLORS.ONCOGENE}` }}></div>
+            <span className="text-white/80">Oncogene / Growth Factor</span>
           </div>
-          <div className="pt-2 border-t border-slate-700/50 text-emerald-400">
-            💡 Click nodes for details
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full shadow-lg" style={{ backgroundColor: FUNCTION_COLORS.KINASE, boxShadow: `0 0 8px ${FUNCTION_COLORS.KINASE}` }}></div>
+            <span className="text-white/80">Kinase / Signaling</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full shadow-lg" style={{ backgroundColor: FUNCTION_COLORS.CELL_CYCLE, boxShadow: `0 0 8px ${FUNCTION_COLORS.CELL_CYCLE}` }}></div>
+            <span className="text-white/80">Cell Cycle / Transcription</span>
+          </div>
+          <div className="pt-1.5 mt-1.5 border-t border-white/10 text-emerald-400 text-[10px]">
+            💡 Node size = Degree centrality
           </div>
         </div>
       </div>

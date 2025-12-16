@@ -10,7 +10,7 @@ Biology Context:
 - Modules/Clusters: Functional protein complexes or pathways
 """
 
-from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi import FastAPI, HTTPException, UploadFile, File, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
@@ -22,12 +22,24 @@ from collections import defaultdict
 import io
 import json
 import io
+from sqlalchemy.orm import Session
+
+# Database imports
+from database import SessionLocal, engine, Base, get_db
+from models import Gene
 
 app = FastAPI(
     title="PPI Network Explorer API",
     description="Automated PPI network construction and analysis",
     version="1.0.0"
 )
+
+# Create database tables on startup
+@app.on_event("startup")
+async def startup_event():
+    """Initialize database tables on application startup"""
+    Base.metadata.create_all(bind=engine)
+    print("✓ Database tables created/verified")
 
 # CORS configuration - allow frontend to communicate with backend
 app.add_middleware(
@@ -46,6 +58,26 @@ class GeneRequest(BaseModel):
     """Request model for gene list submission"""
     genes: List[str] = Field(..., description="List of gene symbols (e.g., TP53, BRCA1)")
     confidence_threshold: Optional[float] = Field(0.4, description="STRING DB confidence score (0-1)")
+
+# ============================================================================
+# DATABASE HELPER FUNCTIONS
+# ============================================================================
+
+def get_gene_category(gene_symbol: str, db: Session) -> str:
+    """
+    Query the database for a gene's functional category.
+    
+    Args:
+        gene_symbol: Gene symbol (e.g., 'TP53')
+        db: Database session
+    
+    Returns:
+        Category string or 'Unknown' if not found
+    """
+    gene = db.query(Gene).filter(Gene.symbol == gene_symbol.upper()).first()
+    if gene:
+        return gene.category
+    return "Unknown"
 
 # ============================================================================
 # PHASE 2: NETWORK CONSTRUCTION FROM STRING DB
@@ -171,7 +203,7 @@ def parse_gene_file(file_content: bytes, filename: str) -> List[str]:
 # PHASE 3 & 4: NETWORK ANALYSIS
 # ============================================================================
 
-def analyze_network(interactions: List[Dict], genes_found: List[str], genes_not_found: List[str]) -> Dict[str, Any]:
+def analyze_network(interactions: List[Dict], genes_found: List[str], genes_not_found: List[str], db: Session) -> Dict[str, Any]:
     """
     Perform comprehensive topological analysis of the PPI network.
     
@@ -179,9 +211,13 @@ def analyze_network(interactions: List[Dict], genes_found: List[str], genes_not_
     1. Degree Centrality: Identifies hub proteins (highly connected)
     2. Betweenness Centrality: Identifies bottleneck proteins (control information flow)
     3. Module Detection: Identifies functional protein complexes/pathways
+    4. Gene Category Annotation: Retrieves biological function from database
     
     Args:
         interactions: List of interaction dictionaries from STRING
+        genes_found: Genes successfully retrieved from STRING
+        genes_not_found: Genes not found in STRING database
+        db: Database session for gene category lookups
     
     Returns:
         Cytoscape.js formatted network with analysis results
@@ -248,8 +284,11 @@ def analyze_network(interactions: List[Dict], genes_found: List[str], genes_not_
     
     elements = []
     
-    # Add nodes with computed metrics
+    # Add nodes with computed metrics and category from database
     for node in G.nodes():
+        # Query database for gene category
+        category = get_gene_category(node, db)
+        
         elements.append({
             "data": {
                 "id": node,
@@ -257,7 +296,8 @@ def analyze_network(interactions: List[Dict], genes_found: List[str], genes_not_
                 "degree": round(degree_centrality.get(node, 0), 4),
                 "betweenness": round(betweenness_centrality.get(node, 0), 4),
                 "module": node_to_module.get(node, 0),
-                "node_degree": G.degree(node)  # Actual number of connections
+                "node_degree": G.degree(node),  # Actual number of connections
+                "category": category  # Biological function from database
             }
         })
     
@@ -321,7 +361,7 @@ async def root():
     }
 
 @app.post("/analyze")
-async def analyze_ppi_network(request: GeneRequest):
+async def analyze_ppi_network(request: GeneRequest, db: Session = Depends(get_db)):
     """
     Main endpoint: Construct and analyze PPI network from seed genes.
     
@@ -330,7 +370,8 @@ async def analyze_ppi_network(request: GeneRequest):
     2. Build network graph
     3. Perform topological analysis
     4. Detect functional modules
-    5. Return Cytoscape.js formatted results
+    5. Annotate nodes with gene categories from database
+    6. Return Cytoscape.js formatted results
     
     Example request:
     {
@@ -345,8 +386,8 @@ async def analyze_ppi_network(request: GeneRequest):
             request.confidence_threshold
         )
         
-        # Phase 3 & 4: Analyze network
-        analysis_results = analyze_network(interactions, genes_found, genes_not_found)
+        # Phase 3 & 4: Analyze network with database category annotation
+        analysis_results = analyze_network(interactions, genes_found, genes_not_found, db)
         
         return analysis_results
     
