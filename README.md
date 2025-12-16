@@ -1,4 +1,4 @@
-# 🧬 PPI Network Explorer
+# PPI Network Explorer
 
 **Professional Protein-Protein Interaction Network Analysis Platform**
 
@@ -6,7 +6,7 @@ A comprehensive full-stack bioinformatics tool featuring dark-mode interface, in
 
 ---
 
-## 🎯 Features
+## Features
 
 ### Core Workflow
 #### Phase 1: Gene Input & Preparation
@@ -40,7 +40,7 @@ A comprehensive full-stack bioinformatics tool featuring dark-mode interface, in
 
 ### Advanced Features
 
-#### 🔍 Protein Details Modal (Click any node)
+#### Protein Details Modal (Click any node)
 - **Protein Information**:
   - Full annotation from STRING Database
   - Protein ID and preferred name
@@ -52,7 +52,7 @@ A comprehensive full-stack bioinformatics tool featuring dark-mode interface, in
   - Data source attribution
   - Druggability status and categories
 
-#### 📊 Export Capabilities
+#### Export Capabilities
 - **CSV Export**: Multi-section report with:
   - All network nodes with centrality metrics
   - All edges with confidence scores
@@ -62,7 +62,7 @@ A comprehensive full-stack bioinformatics tool featuring dark-mode interface, in
 - **JSON Export**: Complete network data for reproducibility and programmatic analysis
 - **PNG Export**: High-resolution (3x) network visualization for presentations/publications
 
-#### 📈 Collapsible Data Panel
+#### Collapsible Data Panel
 - **Hub Proteins Tab**: Top proteins by degree centrality
 - **Bottleneck Proteins Tab**: Top proteins by betweenness centrality
 - **Functional Modules Tab**: Detected protein clusters with color coding
@@ -105,7 +105,7 @@ Prot_Map/
 
 ---
 
-## 🚀 Setup Instructions
+## Setup Instructions
 
 ### Prerequisites
 - **Python 3.8+**
@@ -150,8 +150,8 @@ Prot_Map/
    python main.py
    ```
 
-   ✅ Backend running at: `http://localhost:8000`
-   📖 API docs available at: `http://localhost:8000/docs`
+  Backend running at: `http://localhost:8000`
+  API docs available at: `http://localhost:8000/docs`
 
 ---
 
@@ -181,11 +181,11 @@ Prot_Map/
    npm run dev
    ```
 
-   ✅ Frontend running at: `http://localhost:5173`
+  Frontend running at: `http://localhost:5173`
 
 ---
 
-## 📖 Usage Guide
+## Usage Guide
 
 ### 1. Input Phase
 - Open `http://localhost:5173` in your browser
@@ -248,7 +248,7 @@ Prot_Map/
 
 ---
 
-## 🔬 Biological Context & Research Applications
+## Biological Context & Research Applications
 
 ### Understanding Network Metrics
 
@@ -349,7 +349,7 @@ Densely connected protein clusters representing functional units:
 
 ---
 
-## 🛠️ Technical Details
+## Technical Details
 
 ### Backend Stack (Python/FastAPI)
 - **FastAPI**: Modern Python web framework with automatic API documentation
@@ -391,7 +391,7 @@ Densely connected protein clusters representing functional units:
 
 ---
 
-## 📊 API Reference
+## API Reference
 
 ### POST `/analyze`
 Construct and analyze PPI network from gene list.
@@ -589,7 +589,7 @@ Fetch drug-gene interactions from DGIdb.
 
 ---
 
-## 🚀 Production Deployment
+## Production Deployment
 
 ### Backend Deployment
 
@@ -682,7 +682,7 @@ VITE_API_URL=https://your-backend-api.com
 
 ---
 
-## 📚 References
+## References
 
 ### Data Sources
 - **STRING Database**: https://string-db.org/
@@ -702,7 +702,7 @@ VITE_API_URL=https://your-backend-api.com
 
 ---
 
-## 📄 License & Citation
+## License & Citation
 
 ### License
 This project is released under the MIT License for educational and research purposes.
@@ -724,7 +724,7 @@ https://github.com/[your-repo]
 
 ---
 
-## 🆘 Support & Contributing
+## Support & Contributing
 
 ### Getting Help
 - **Documentation**: Check `NEW_FEATURES.md` and `QUICK_START_GUIDE.md`
@@ -754,7 +754,7 @@ Contributions are welcome! Areas for improvement:
 
 ---
 
-## ⚡ Quick Reference
+## Quick Reference
 
 ### Common Commands
 ```bash
@@ -795,7 +795,7 @@ gunicorn main:app --workers 4 --worker-class uvicorn.workers.UvicornWorker
 
 ---
 
-## 👨‍💻 Development
+## Development
 
 ### Project Structure
 - **Backend**: FastAPI REST API with NetworkX analysis engine
@@ -828,7 +828,7 @@ gunicorn main:app --workers 4 --worker-class uvicorn.workers.UvicornWorker
 
 ---
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - **STRING Database** team for comprehensive PPI data and API access
 - **DGIdb** team for drug-gene interaction data
