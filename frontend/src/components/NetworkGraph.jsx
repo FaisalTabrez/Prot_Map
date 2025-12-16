@@ -37,7 +37,7 @@ function NetworkGraph({ elements }) {
    * Cytoscape.js stylesheet - Dark theme optimized
    */
   const stylesheet = [
-    // Node styling
+    // Node styling - Bioluminescent, glossy, vibrant on deep-black background
     {
       selector: 'node',
       style: {
@@ -45,12 +45,12 @@ function NetworkGraph({ elements }) {
         'text-valign': 'center',
         'text-halign': 'center',
         'font-size': '11px',
-        'font-weight': 'bold',
-        'color': '#f1f5f9', // Slate-100
-        'text-outline-width': 3,
-        'text-outline-color': '#0f172a', // Slate-900
-        
-        // Size based on degree centrality
+        'font-weight': '700',
+        'color': '#ffffff', // white labels for contrast
+        'text-outline-width': 2,
+        'text-outline-color': '#000000', // subtle outline for readability
+
+        // Size based on degree centrality (keep original mapping)
         'width': (ele) => {
           const degree = ele.data('degree') || 0
           return Math.max(35, Math.min(90, 35 + degree * 120))
@@ -59,62 +59,93 @@ function NetworkGraph({ elements }) {
           const degree = ele.data('degree') || 0
           return Math.max(35, Math.min(90, 35 + degree * 120))
         },
-        
-        // Color based on module
+
+        // Bioluminescent color mapping: hubs, bottlenecks, regular nodes
         'background-color': (ele) => {
-          const module = ele.data('module') || 0
-          return MODULE_COLORS[module % MODULE_COLORS.length]
+          const degree = ele.data('degree') || 0
+          const betweenness = ele.data('betweenness') || 0
+          // Determine hubs by degree threshold, bottlenecks by betweenness
+          if (degree >= 0.6) return '#F72585' // Neon Pink/Magenta for hubs
+          if (betweenness >= 0.18) return '#7209B7' // Vibrant Purple for bottlenecks
+          return '#4CC9F0' // Electric Blue/Cyan for regular nodes
         },
-        
-        'border-width': 3,
-        'border-color': '#1e293b', // Slate-800
-        'border-opacity': 0.8,
-        
-        // Glow effect
-        'shadow-blur': 15,
+
+        // Glossy white highlight border
+        'border-width': 2,
+        'border-color': '#ffffff',
+        'border-opacity': 0.95,
+
+        // Glow effect tuned for black background
+        'shadow-blur': (ele) => {
+          const degree = ele.data('degree') || 0
+          return 10 + Math.min(40, Math.floor(degree * 50))
+        },
         'shadow-color': (ele) => {
-          const module = ele.data('module') || 0
-          return MODULE_COLORS[module % MODULE_COLORS.length]
+          const degree = ele.data('degree') || 0
+          const betweenness = ele.data('betweenness') || 0
+          if (degree >= 0.6) return '#F72585'
+          if (betweenness >= 0.18) return '#7209B7'
+          return '#4CC9F0'
         },
-        'shadow-opacity': 0.6,
+        'shadow-opacity': 0.85,
       }
     },
-    
-    // Edge styling - Dark theme
+
+    // Dimmed class for unfocused elements
+    {
+      selector: '.dimmed',
+      style: {
+        'opacity': 0.12,
+        'transition-property': 'opacity',
+        'transition-duration': '200ms'
+      }
+    },
+
+    // Edge styling - thin optical-fiber look
     {
       selector: 'edge',
       style: {
-        'width': 2,
-        'line-color': '#475569', // Slate-600
-        'target-arrow-color': '#475569',
+        'width': 1,
+        'line-color': '#ffffff',
+        'opacity': 0.28,
         'curve-style': 'bezier',
-        'opacity': 0.4,
+        'target-arrow-shape': 'none'
       }
     },
-    
-    // Hover effects
+
+    // Selected node: bright yellow and expanded glow/size
     {
       selector: 'node:selected',
       style: {
-        'border-width': 5,
-        'border-color': '#10b981', // Emerald-500
-        'overlay-opacity': 0.3,
-        'overlay-color': '#10b981',
-        'shadow-blur': 25,
-        'shadow-opacity': 0.8,
+        'background-color': '#FFD60A',
+        'border-color': '#ffffff',
+        'border-width': 3,
+        'shadow-blur': 48,
+        'shadow-color': '#FFD60A',
+        'shadow-opacity': 1,
+        // increase size slightly while preserving degree mapping
+        'width': (ele) => {
+          const degree = ele.data('degree') || 0
+          return Math.max(45, Math.min(110, 45 + degree * 150))
+        },
+        'height': (ele) => {
+          const degree = ele.data('degree') || 0
+          return Math.max(45, Math.min(110, 45 + degree * 150))
+        },
+        'label': 'data(label)'
       }
     },
-    
-    // Connected edges on hover
+
+    // Selected edge emphasis
     {
       selector: 'edge:selected',
       style: {
-        'width': 4,
-        'line-color': '#10b981',
+        'width': 2,
+        'line-color': '#FFD60A',
         'opacity': 0.9,
-        'shadow-blur': 10,
-        'shadow-color': '#10b981',
-        'shadow-opacity': 0.5,
+        'shadow-blur': 12,
+        'shadow-color': '#FFD60A',
+        'shadow-opacity': 0.6
       }
     }
   ]
@@ -233,13 +264,13 @@ function NetworkGraph({ elements }) {
   }
 
   return (
-    <div className="relative w-full h-full rounded-xl overflow-hidden">
+    <div className="relative w-full h-full rounded-xl overflow-hidden bg-black" style={{ backgroundColor: '#000000' }}>
       <CytoscapeComponent
         elements={elements}
         style={{ 
           width: '100%', 
           height: '100%',
-          backgroundColor: '#020617', // Slate-950
+          backgroundColor: '#000000', // Deep black background
         }}
         stylesheet={stylesheet}
         layout={layout}
