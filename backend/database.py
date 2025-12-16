@@ -86,15 +86,15 @@ def bulk_create_genes(db: Session, genes_data: List[Dict[str, str]]) -> int:
     
     Args:
         db: Database session
-        genes_data: List of dictionaries with 'symbol', 'category', 'description' keys
+        genes_data: List of dictionaries with 'symbol', 'category_id', 'description' keys
     
     Returns:
         Number of genes successfully inserted
     
     Example:
         >>> new_genes = [
-        ...     {"symbol": "TP53", "category": "Tumor Suppressor", "description": "..."},
-        ...     {"symbol": "EGFR", "category": "Oncogene", "description": "..."}
+        ...     {"symbol": "TP53", "category_id": 1, "description": "..."},
+        ...     {"symbol": "EGFR", "category_id": 2, "description": "..."}
         ... ]
         >>> count = bulk_create_genes(db, new_genes)
         >>> print(f"Added {count} genes")
@@ -106,7 +106,7 @@ def bulk_create_genes(db: Session, genes_data: List[Dict[str, str]]) -> int:
         gene_objects = [
             Gene(
                 symbol=data['symbol'].upper(),
-                category=data['category'],
+                category_id=data['category_id'],
                 description=data.get('description', '')
             )
             for data in genes_data
@@ -124,3 +124,118 @@ def bulk_create_genes(db: Session, genes_data: List[Dict[str, str]]) -> int:
         print(f"❌ Bulk insert failed: {e}")
         return 0
 
+
+# ============================================================================
+# CATEGORY MANAGEMENT FUNCTIONS
+# ============================================================================
+
+def get_all_categories(db: Session) -> Dict[str, 'Category']:
+    """
+    Retrieve all categories from database.
+    
+    Args:
+        db: Database session
+    
+    Returns:
+        Dictionary mapping category names to Category objects
+    
+    Example:
+        >>> categories = get_all_categories(db)
+        >>> print(categories['Tumor Suppressor'].color)
+        '#ff3333'
+    """
+    from models import Category
+    
+    categories = db.query(Category).all()
+    return {cat.name: cat for cat in categories}
+
+
+def get_categories_by_names(db: Session, names: List[str]) -> Dict[str, 'Category']:
+    """
+    Retrieve specific categories by their names.
+    
+    Args:
+        db: Database session
+        names: List of category names
+    
+    Returns:
+        Dictionary mapping category names to Category objects
+    
+    Example:
+        >>> cats = get_categories_by_names(db, ['Kinase', 'Ion Channel'])
+        >>> print(cats.get('Ion Channel'))  # None if doesn't exist
+    """
+    from models import Category
+    
+    categories = db.query(Category).filter(Category.name.in_(names)).all()
+    return {cat.name: cat for cat in categories}
+
+
+def create_category(db: Session, name: str, color: str = "#808080") -> 'Category':
+    """
+    Create a new category in the database.
+    
+    Args:
+        db: Database session
+        name: Category name (e.g., 'Ion Channel')
+        color: Hex color code (default: grey)
+    
+    Returns:
+        Created Category object
+    
+    Example:
+        >>> new_cat = create_category(db, 'Ion Channel', '#00bfff')
+        >>> print(new_cat.id)
+        6
+    """
+    from models import Category
+    
+    new_category = Category(name=name, color=color)
+    db.add(new_category)
+    db.commit()
+    db.refresh(new_category)
+    
+    print(f"✓ Created category: {name} ({color})")
+    return new_category
+
+
+def bulk_create_categories(db: Session, categories_data: List[Dict[str, str]]) -> int:
+    """
+    Bulk insert multiple categories into the database.
+    
+    Args:
+        db: Database session
+        categories_data: List of dicts with 'name' and optional 'color' keys
+    
+    Returns:
+        Number of categories successfully inserted
+    
+    Example:
+        >>> new_cats = [
+        ...     {"name": "Ion Channel", "color": "#00bfff"},
+        ...     {"name": "Cytokine"}  # Uses default grey
+        ... ]
+        >>> count = bulk_create_categories(db, new_cats)
+    """
+    from models import Category
+    
+    try:
+        # Create Category objects
+        category_objects = [
+            Category(
+                name=data['name'],
+                color=data.get('color', '#808080')
+            )
+            for data in categories_data
+        ]
+        
+        # Add all to session
+        db.bulk_save_objects(category_objects)
+        db.commit()
+        
+        print(f"✓ Bulk inserted {len(category_objects)} categories")
+        return len(category_objects)
+    
+    except Exception as e:
+        db.rollback()
+        print(f"❌ Category bulk insert failed: {e}")

@@ -8,10 +8,51 @@ Usage:
 """
 
 from database import SessionLocal, engine, Base
-from models import Gene
+from models import Gene, Category
 
 # Create all tables
 Base.metadata.create_all(bind=engine)
+
+
+def seed_categories():
+    """
+    Seed the database with initial functional categories.
+    Returns a mapping of category names to Category objects.
+    """
+    db = SessionLocal()
+    
+    # Define initial cancer-related categories with colors
+    categories_data = [
+        {"name": "Tumor Suppressor", "color": "#ff3333"},  # Neon Red
+        {"name": "Oncogene", "color": "#00ff88"},          # Neon Green
+        {"name": "Kinase", "color": "#ffaa00"},            # Neon Orange
+        {"name": "Transcription Factor", "color": "#bc13fe"},  # Neon Purple
+        {"name": "Other", "color": "#808080"},             # Grey
+    ]
+    
+    category_map = {}
+    added_count = 0
+    
+    for cat_data in categories_data:
+        # Check if category already exists
+        existing_cat = db.query(Category).filter(Category.name == cat_data["name"]).first()
+        
+        if existing_cat:
+            print(f"⏭️  Category exists: {cat_data['name']}")
+            category_map[cat_data["name"]] = existing_cat
+        else:
+            # Create new category
+            new_cat = Category(**cat_data)
+            db.add(new_cat)
+            db.flush()  # Flush to get the ID
+            category_map[cat_data["name"]] = new_cat
+            print(f"✅ Added category: {cat_data['name']} ({cat_data['color']})")
+            added_count += 1
+    
+    db.commit()
+    print(f"\n📂 Categories ready: {len(category_map)} total ({added_count} new)\n")
+    
+    return category_map, db
 
 
 def seed_genes():
@@ -19,7 +60,8 @@ def seed_genes():
     Seed the database with initial gene data.
     Checks for existing entries to avoid duplicates.
     """
-    db = SessionLocal()
+    # First, seed categories
+    category_map, db = seed_categories()
     
     # Define seed data with categories
     seed_data = [
@@ -108,10 +150,22 @@ def seed_genes():
             print(f"⏭️  Skipped: {gene_data['symbol']} (already exists)")
             skipped_count += 1
         else:
-            # Create new gene entry
-            new_gene = Gene(**gene_data)
+            # Get category ID from category_map
+            category_name = gene_data["category"]
+            category_obj = category_map.get(category_name)
+            
+            if not category_obj:
+                print(f"⚠️  Warning: Category '{category_name}' not found, skipping {gene_data['symbol']}")
+                continue
+            
+            # Create new gene entry with category_id
+            new_gene = Gene(
+                symbol=gene_data["symbol"],
+                category_id=category_obj.id,
+                description=gene_data.get("description")
+            )
             db.add(new_gene)
-            print(f"✅ Added: {gene_data['symbol']} ({gene_data['category']})")
+            print(f"✅ Added: {gene_data['symbol']} ({category_name})")
             added_count += 1
     
     # Commit all changes

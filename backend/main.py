@@ -30,8 +30,12 @@ import asyncio
 from sqlalchemy.orm import Session
 
 # Database imports
-from database import SessionLocal, engine, Base, get_db, get_genes_by_symbols, bulk_create_genes
-from models import Gene
+from database import (
+    SessionLocal, engine, Base, get_db, get_genes_by_symbols, 
+    bulk_create_genes, get_all_categories, get_categories_by_names,
+    bulk_create_categories
+)
+from models import Gene, Category
 from ai_service import batch_fetch_genes
 
 app = FastAPI(
@@ -65,43 +69,63 @@ class GeneRequest(BaseModel):
     genes: List[str] = Field(..., description="List of gene symbols (e.g., TP53, BRCA1)")
     confidence_threshold: Optional[float] = Field(0.4, description="STRING DB confidence score (0-1)")
 
+
+class CategoryReviewRequest(BaseModel):
+    """Request model for category review confirmation"""
+    new_categories: List[str] = Field(..., description="List of new category names to create")
+    pending_genes: List[Dict[str, str]] = Field(..., description="Gene data to save after category approval")
+    original_gene_list: List[str] = Field(..., description="Original gene list from user for network analysis")
+    confidence_threshold: Optional[float] = Field(0.4, description="STRING DB confidence score")
+
+
 # ============================================================================
 # DATABASE HELPER FUNCTIONS
 # ============================================================================
 
 def get_gene_category(gene_symbol: str, db: Session) -> str:
     """
-    Query the database for a gene's functional category.
+    Query the database for a gene's functional category name.
     
     Args:
         gene_symbol: Gene symbol (e.g., 'TP53')
         db: Database session
     
     Returns:
-        Category string or 'Unknown' if not found
+        Category name string or 'Unknown' if not found
     """
     gene = db.query(Gene).filter(Gene.symbol == gene_symbol.upper()).first()
-    if gene:
-        return gene.category
+    if gene and gene.category_ref:
+        return gene.category_ref.name
     return "Unknown"
 
 
-async def enrich_missing_genes(gene_symbols: List[str], db: Session) -> None:
+async def enrich_missing_genes(gene_symbols: List[str], db: Session) -> Optional[Dict[str, Any]]:
     """
     Auto-enrichment: Fetch metadata for genes not in database using Gemini API.
     
-    This function adds a slight delay only on the *first* run for new genes.
-    Subsequent requests use cached data from SQLite, making them instantaneous.
+    Implements category review workflow:
+    - If AI suggests new categories not in DB, returns review data (doesn't save)
+    - If all categories exist, saves genes immediately and returns None
     
     Workflow:
     1. Check which genes are missing from database
     2. If missing genes found, query Gemini API in parallel
-    3. Bulk insert results into database
-    4. Future requests for these genes will use cached data
+    3. Extract unique categories from AI responses
+    4. Check if any new categories exist
+    5a. If new categories -> Return review data for frontend approval
+    5b. If all categories exist -> Bulk insert genes and return None
     
     Args:
         gene_symbols: List of gene symbols from user request
         db: Database session for queries and inserts
+    
+    Returns:
+        None if successful auto-save
+        Dict with review data if new categories detected:
+        {
+            "new_categories": ["Ion Channel", "Cytokine"],
+            "pending_genes": [{"symbol": "...", "category": "...", "description": "..."}]
+        }
     """
     # Normalize symbols to uppercase
     normalized_symbols = [s.upper() for s in gene_symbols]
@@ -115,7 +139,7 @@ async def enrich_missing_genes(gene_symbols: List[str], db: Session) -> None:
     
     if not missing_symbols:
         print(f"✓ All {len(normalized_symbols)} genes found in database (cache hit)")
-        return
+        return None
     
     print(f"🔍 Auto-enrichment: {len(missing_symbols)} new genes found")
     print(f"   Missing: {', '.join(missing_symbols[:10])}{'...' if len(missing_symbols) > 10 else ''}")
@@ -123,11 +147,44 @@ async def enrich_missing_genes(gene_symbols: List[str], db: Session) -> None:
     # Fetch gene info from Gemini API in parallel
     gene_info_map = await batch_fetch_genes(missing_symbols)
     
-    # Prepare data for bulk insert
+    # Extract unique categories from AI responses
+    ai_categories = set(info["category"] for info in gene_info_map.values())
+    print(f"📂 Categories from AI: {', '.join(ai_categories)}")
+    
+    # Check which categories exist in database
+    existing_categories = get_categories_by_names(db, list(ai_categories))
+    existing_category_names = set(existing_categories.keys())
+    
+    # Identify new categories that need user approval
+    new_categories = list(ai_categories - existing_category_names)
+    
+    if new_categories:
+        print(f"⚠️  New categories detected: {', '.join(new_categories)}")
+        print(f"   Pausing for user review...")
+        
+        # Return review data - don't save yet
+        pending_genes = [
+            {
+                "symbol": symbol,
+                "category": info["category"],
+                "description": info["description"]
+            }
+            for symbol, info in gene_info_map.items()
+        ]
+        
+        return {
+            "new_categories": new_categories,
+            "pending_genes": pending_genes
+        }
+    
+    # All categories exist - proceed with auto-save
+    print(f"✓ All categories exist in database")
+    
+    # Prepare data for bulk insert (with category_id from existing categories)
     genes_to_insert = [
         {
             "symbol": symbol,
-            "category": info["category"],
+            "category_id": existing_categories[info["category"]].id,
             "description": info["description"]
         }
         for symbol, info in gene_info_map.items()
@@ -137,6 +194,8 @@ async def enrich_missing_genes(gene_symbols: List[str], db: Session) -> None:
     if genes_to_insert:
         inserted_count = bulk_create_genes(db, genes_to_insert)
         print(f"✓ Cached {inserted_count} new genes for future requests")
+    
+    return None
 
 
 # ============================================================================
@@ -427,12 +486,13 @@ async def analyze_ppi_network(request: GeneRequest, db: Session = Depends(get_db
     
     Workflow:
     1. Auto-enrich missing genes using Gemini API (cached in SQLite)
-    2. Fetch interactions from STRING DB
-    3. Build network graph
-    4. Perform topological analysis
-    5. Detect functional modules
-    6. Annotate nodes with gene categories from database
-    7. Return Cytoscape.js formatted results
+    2. If new categories detected -> Return 202 (Accepted) with review data
+    3. Fetch interactions from STRING DB
+    4. Build network graph
+    5. Perform topological analysis
+    6. Detect functional modules
+    7. Annotate nodes with gene categories from database
+    8. Return Cytoscape.js formatted results
     
     Note: Auto-enrichment adds a slight delay only on the *first* run for new genes.
     Subsequent requests use cached database values for instant response.
@@ -442,10 +502,22 @@ async def analyze_ppi_network(request: GeneRequest, db: Session = Depends(get_db
         "genes": ["TP53", "BRCA1", "EGFR", "AKT1"],
         "confidence_threshold": 0.4
     }
+    
+    Returns:
+    - 202 (Accepted) with review data if new categories detected
+    - 200 (OK) with network analysis if all categories exist
     """
     try:
         # Phase 1: Auto-enrich missing genes from Gemini API
-        await enrich_missing_genes(request.genes, db)
+        review_data = await enrich_missing_genes(request.genes, db)
+        
+        # If new categories detected, pause for user review
+        if review_data:
+            return {
+                "status": "review_required",
+                "new_categories": review_data["new_categories"],
+                "pending_genes": review_data["pending_genes"]
+            }
         
         # Phase 2: Fetch interactions from STRING DB
         interactions, genes_found, genes_not_found = fetch_string_interactions(
@@ -462,6 +534,85 @@ async def analyze_ppi_network(request: GeneRequest, db: Session = Depends(get_db
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
+
+
+@app.post("/confirm-categories")
+async def confirm_new_categories(request: CategoryReviewRequest, db: Session = Depends(get_db)):
+    """
+    Endpoint for user approval of new functional categories.
+    
+    After user reviews and approves new categories suggested by AI:
+    1. Create the new Category entries in the database (with default grey color)
+    2. Save the pending Gene entries with proper category foreign keys
+    3. Proceed with network analysis using original gene list
+    4. Return complete network visualization
+    
+    Workflow:
+    - Frontend displays modal with new categories
+    - User clicks "Approve & Continue"
+    - This endpoint creates categories, saves genes, and generates network
+    
+    Example request:
+    {
+        "new_categories": ["Ion Channel", "Cytokine"],
+        "pending_genes": [
+            {"symbol": "SCN1A", "category": "Ion Channel", "description": "..."},
+            {"symbol": "IL6", "category": "Cytokine", "description": "..."}
+        ],
+        "original_gene_list": ["SCN1A", "IL6", "TP53"],
+        "confidence_threshold": 0.4
+    }
+    """
+    try:
+        print(f"\n{'='*60}")
+        print(f"📋 Category Review: User approved {len(request.new_categories)} new categories")
+        print(f"   Categories: {', '.join(request.new_categories)}")
+        
+        # Step 1: Create new categories with default grey color
+        categories_to_create = [
+            {"name": cat_name, "color": "#808080"}
+            for cat_name in request.new_categories
+        ]
+        
+        created_count = bulk_create_categories(db, categories_to_create)
+        print(f"✓ Created {created_count} new categories")
+        
+        # Step 2: Fetch the newly created categories to get their IDs
+        all_categories = get_categories_by_names(
+            db,
+            [gene["category"] for gene in request.pending_genes]
+        )
+        
+        # Step 3: Save pending genes with category_id foreign keys
+        genes_to_insert = [
+            {
+                "symbol": gene["symbol"],
+                "category_id": all_categories[gene["category"]].id,
+                "description": gene.get("description", "")
+            }
+            for gene in request.pending_genes
+            if gene["category"] in all_categories
+        ]
+        
+        if genes_to_insert:
+            inserted_count = bulk_create_genes(db, genes_to_insert)
+            print(f"✓ Saved {inserted_count} pending genes with approved categories")
+        
+        print(f"{'='*60}\n")
+        
+        # Step 4: Proceed with normal network analysis
+        interactions, genes_found, genes_not_found = fetch_string_interactions(
+            request.original_gene_list,
+            request.confidence_threshold
+        )
+        
+        analysis_results = analyze_network(interactions, genes_found, genes_not_found, db)
+        
+        return analysis_results
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Category confirmation failed: {str(e)}")
+
 
 @app.post("/upload-genes")
 async def upload_gene_file(file: UploadFile = File(...)):

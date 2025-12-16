@@ -61,16 +61,21 @@ async def fetch_gene_info(gene_symbol: str) -> Dict[str, str]:
         # Initialize Gemini model
         model = genai.GenerativeModel('gemini-1.5-flash')
         
-        # Construct the prompt with strict output format
+        # Construct the prompt - allow any concise category (disease-agnostic)
         prompt = f"""Provide information about the human gene {gene_symbol}.
 
 Return ONLY valid JSON in this exact format (no markdown, no backticks, no extra text):
 {{
   "description": "Brief biological function in max 15 words",
-  "category": "One of: Tumor Suppressor, Oncogene, Kinase, Transcription Factor, Other"
+  "category": "Concise functional category (max 2 words, e.g., 'Ion Channel', 'Cytokine', 'Enzyme', 'Tumor Suppressor')"
 }}
 
 Gene: {gene_symbol}
+
+Important: 
+- Category should be a general functional class (e.g., 'Receptor', 'Kinase', 'Transcription Factor')
+- Use standard biological terminology
+- Keep it concise (max 2 words)
 """
         
         # Generate response
@@ -90,15 +95,10 @@ Gene: {gene_symbol}
         if 'description' not in gene_info or 'category' not in gene_info:
             raise ValueError("Missing required fields in Gemini response")
         
-        # Validate category against allowed values
-        allowed_categories = [
-            "Tumor Suppressor", "Oncogene", "Kinase", 
-            "Transcription Factor", "Other"
-        ]
-        
-        if gene_info['category'] not in allowed_categories:
-            print(f"⚠️  Invalid category '{gene_info['category']}' for {gene_symbol}, defaulting to 'Other'")
-            gene_info['category'] = "Other"
+        # Normalize category (title case, trim whitespace)
+        gene_info['category'] = gene_info['category'].strip().title()
+        # Normalize category (title case, trim whitespace)
+        gene_info['category'] = gene_info['category'].strip().title()
         
         # Truncate description if too long
         if len(gene_info['description']) > 150:

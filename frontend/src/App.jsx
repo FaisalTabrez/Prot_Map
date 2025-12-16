@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Dna, Network, Activity, Download, ChevronRight, Loader2, BarChart3, X, Upload, FileText, AlertCircle, FileDown, FileJson, Image } from 'lucide-react'
 import NetworkGraph from './components/NetworkGraph'
 import DataPanel from './components/DataPanel'
+import ReviewModal from './components/ReviewModal'
 import { cn } from './lib/utils'
 import './App.css'
 
@@ -27,6 +28,11 @@ function App() {
   const [genesNotFound, setGenesNotFound] = useState([])
   const [uploadedFileName, setUploadedFileName] = useState('')
   const [showExportMenu, setShowExportMenu] = useState(false)
+
+  // Category review state
+  const [showReviewModal, setShowReviewModal] = useState(false)
+  const [reviewData, setReviewData] = useState(null)
+  const [pendingAnalysisParams, setPendingAnalysisParams] = useState(null)
 
   /**
    * Handle network construction and analysis
@@ -82,6 +88,28 @@ function App() {
 
       const data = await response.json()
 
+      // Check if category review is required
+      if (data.status === 'review_required') {
+        console.log('📋 Category review required:', data.new_categories)
+        
+        // Store review data and analysis parameters
+        setReviewData({
+          new_categories: data.new_categories,
+          pending_genes: data.pending_genes
+        })
+        
+        setPendingAnalysisParams({
+          genes: genes,
+          confidence_threshold: 0.4
+        })
+        
+        // Show review modal
+        setShowReviewModal(true)
+        setLoading(false)
+        return
+      }
+
+      // Normal flow - no review needed
       if (data.elements.length === 0) {
         setError('No interactions found. Try adding more genes or different gene symbols.')
         setGenesNotFound(data.genes_not_found || genes)
@@ -98,6 +126,71 @@ function App() {
     } finally {
       setLoading(false)
     }
+  }
+
+  /**
+   * Handle category approval and continue with network analysis
+   */
+  const handleCategoryApproval = async () => {
+    if (!reviewData || !pendingAnalysisParams) {
+      console.error('Missing review data or analysis parameters')
+      return
+    }
+
+    console.log('✓ User approved categories:', reviewData.new_categories)
+    
+    // Close modal and show loading
+    setShowReviewModal(false)
+    setLoading(true)
+
+    try {
+      const response = await fetch('http://localhost:8000/confirm-categories', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          new_categories: reviewData.new_categories,
+          pending_genes: reviewData.pending_genes,
+          original_gene_list: pendingAnalysisParams.genes,
+          confidence_threshold: pendingAnalysisParams.confidence_threshold
+        })
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.detail || 'Category confirmation failed')
+      }
+
+      const data = await response.json()
+
+      if (data.elements.length === 0) {
+        setError('No interactions found. Try adding more genes or different gene symbols.')
+        setGenesNotFound(data.genes_not_found || pendingAnalysisParams.genes)
+        return
+      }
+
+      setNetworkData(data.elements)
+      setStats(data.stats)
+      setGenesNotFound(data.genes_not_found || [])
+      setShowDataPanel(true)
+
+      // Clear review data
+      setReviewData(null)
+      setPendingAnalysisParams(null)
+
+    } catch (err) {
+      setError(err.message || 'Failed to confirm categories')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  /**
+   * Handle category review cancellation
+   */
+  const handleCategoryCancel = () => {
+    setShowReviewModal(false)
+    setReviewData(null)
+    setPendingAnalysisParams(null)
   }
 
   /**
@@ -605,6 +698,16 @@ function App() {
           />
         )}
       </AnimatePresence>
+
+      {/* ================================================================= */}
+      {/* CATEGORY REVIEW MODAL */}
+      {/* ================================================================= */}
+      <ReviewModal
+        isOpen={showReviewModal}
+        newCategories={reviewData?.new_categories || []}
+        onApprove={handleCategoryApproval}
+        onCancel={handleCategoryCancel}
+      />
     </div>
   )
 }
