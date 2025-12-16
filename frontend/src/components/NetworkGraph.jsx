@@ -15,40 +15,40 @@ import ProteinDetailsModal from './ProteinDetailsModal'
  * - Layout: COSE (physics-based) for natural clustering
  */
 
-// Biological function color palette (Neon/Glossy style for dark theme)
-const FUNCTION_COLORS = {
-  'Tumor Suppressor': '#ff3333',      // Neon Red
-  'Oncogene': '#00ff88',              // Neon Green
-  'Kinase': '#ffaa00',                // Neon Orange
-  'Transcription Factor': '#bc13fe',  // Neon Purple
-  'Unknown': '#64748b',               // Slate Grey (fallback)
-}
-
-// Fallback module colors for uncategorized genes
-const MODULE_COLORS = [
-  '#4CC9F0', // Neon Cyan
-  '#F72585', // Neon Pink
-  '#7209B7', // Purple
-]
-
-/**
- * Get node color based on biological function category from database
- * Falls back to module-based coloring if category is Unknown
- */
-function getNodeColor(category, moduleId) {
-  if (category && category !== 'Unknown' && FUNCTION_COLORS[category]) {
-    return FUNCTION_COLORS[category]
-  }
-  // Fallback to module-based coloring
-  if (moduleId !== undefined && moduleId < MODULE_COLORS.length) {
-    return MODULE_COLORS[moduleId]
-  }
-  return FUNCTION_COLORS['Unknown']
-}
-
 function NetworkGraph({ elements }) {
   const cyRef = useRef(null)
   const [selectedGene, setSelectedGene] = useState(null)
+
+  // Biological function color palette (Neon/Glossy style for dark theme)
+  const CATEGORY_COLORS = {
+    "Tumor Suppressor": "#ff3333",     // Neon Red
+    "Oncogene": "#00ff88",             // Neon Green
+    "Kinase": "#ffaa00",               // Neon Orange
+    "Transcription Factor": "#bc13fe", // Neon Purple
+    "Unknown": "#64748b"               // Slate Grey (fallback)
+  }
+
+  // Fallback module colors for uncategorized genes
+  const MODULE_COLORS = [
+    '#4CC9F0', // Neon Cyan
+    '#F72585', // Neon Pink
+    '#7209B7', // Purple
+  ]
+
+  /**
+   * Get node color based on biological function category from database
+   * Falls back to module-based coloring if category is Unknown
+   */
+  const getNodeColor = (category, moduleId) => {
+    if (category && category !== 'Unknown' && CATEGORY_COLORS[category]) {
+      return CATEGORY_COLORS[category]
+    }
+    // Fallback to module-based coloring
+    if (moduleId !== undefined && moduleId < MODULE_COLORS.length) {
+      return MODULE_COLORS[moduleId]
+    }
+    return CATEGORY_COLORS['Unknown']
+  }
 
   /**
    * Cytoscape.js stylesheet - Dark theme optimized
@@ -367,19 +367,19 @@ function NetworkGraph({ elements }) {
         <h4 className="text-xs font-bold text-white/90 mb-2">Gene Functions</h4>
         <div className="space-y-1.5 text-xs">
           <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full shadow-lg" style={{ backgroundColor: FUNCTION_COLORS.TUMOR_SUPPRESSOR, boxShadow: `0 0 8px ${FUNCTION_COLORS.TUMOR_SUPPRESSOR}` }}></div>
+            <div className="w-3 h-3 rounded-full shadow-lg" style={{ backgroundColor: CATEGORY_COLORS["Tumor Suppressor"], boxShadow: `0 0 8px ${CATEGORY_COLORS["Tumor Suppressor"]}` }}></div>
             <span className="text-white/80">Tumor Suppressor / DNA Repair</span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full shadow-lg" style={{ backgroundColor: FUNCTION_COLORS.ONCOGENE, boxShadow: `0 0 8px ${FUNCTION_COLORS.ONCOGENE}` }}></div>
+            <div className="w-3 h-3 rounded-full shadow-lg" style={{ backgroundColor: CATEGORY_COLORS["Oncogene"], boxShadow: `0 0 8px ${CATEGORY_COLORS["Oncogene"]}` }}></div>
             <span className="text-white/80">Oncogene / Growth Factor</span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full shadow-lg" style={{ backgroundColor: FUNCTION_COLORS.KINASE, boxShadow: `0 0 8px ${FUNCTION_COLORS.KINASE}` }}></div>
+            <div className="w-3 h-3 rounded-full shadow-lg" style={{ backgroundColor: CATEGORY_COLORS["Kinase"], boxShadow: `0 0 8px ${CATEGORY_COLORS["Kinase"]}` }}></div>
             <span className="text-white/80">Kinase / Signaling</span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full shadow-lg" style={{ backgroundColor: FUNCTION_COLORS.CELL_CYCLE, boxShadow: `0 0 8px ${FUNCTION_COLORS.CELL_CYCLE}` }}></div>
+            <div className="w-3 h-3 rounded-full shadow-lg" style={{ backgroundColor: CATEGORY_COLORS["Transcription Factor"], boxShadow: `0 0 8px ${CATEGORY_COLORS["Transcription Factor"]}` }}></div>
             <span className="text-white/80">Cell Cycle / Transcription</span>
           </div>
           <div className="pt-1.5 mt-1.5 border-t border-white/10 text-emerald-400 text-[10px]">
