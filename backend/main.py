@@ -8,6 +8,10 @@ Biology Context:
 - Hubs (high degree centrality): Proteins with many interactions, often essential
 - Bottlenecks (high betweenness centrality): Proteins controlling information flow
 - Modules/Clusters: Functional protein complexes or pathways
+
+Auto-Enrichment:
+- New genes are automatically enriched via Google Gemini API
+- Results cached in SQLite to avoid redundant API calls
 """
 
 from fastapi import FastAPI, HTTPException, UploadFile, File, Depends
@@ -22,11 +26,13 @@ from collections import defaultdict
 import io
 import json
 import io
+import asyncio
 from sqlalchemy.orm import Session
 
 # Database imports
-from database import SessionLocal, engine, Base, get_db
+from database import SessionLocal, engine, Base, get_db, get_genes_by_symbols, bulk_create_genes
 from models import Gene
+from ai_service import batch_fetch_genes
 
 app = FastAPI(
     title="PPI Network Explorer API",
@@ -78,6 +84,60 @@ def get_gene_category(gene_symbol: str, db: Session) -> str:
     if gene:
         return gene.category
     return "Unknown"
+
+
+async def enrich_missing_genes(gene_symbols: List[str], db: Session) -> None:
+    """
+    Auto-enrichment: Fetch metadata for genes not in database using Gemini API.
+    
+    This function adds a slight delay only on the *first* run for new genes.
+    Subsequent requests use cached data from SQLite, making them instantaneous.
+    
+    Workflow:
+    1. Check which genes are missing from database
+    2. If missing genes found, query Gemini API in parallel
+    3. Bulk insert results into database
+    4. Future requests for these genes will use cached data
+    
+    Args:
+        gene_symbols: List of gene symbols from user request
+        db: Database session for queries and inserts
+    """
+    # Normalize symbols to uppercase
+    normalized_symbols = [s.upper() for s in gene_symbols]
+    
+    # Check which genes exist in database
+    existing_genes = get_genes_by_symbols(db, normalized_symbols)
+    existing_symbols = set(existing_genes.keys())
+    
+    # Identify missing genes
+    missing_symbols = [s for s in normalized_symbols if s not in existing_symbols]
+    
+    if not missing_symbols:
+        print(f"✓ All {len(normalized_symbols)} genes found in database (cache hit)")
+        return
+    
+    print(f"🔍 Auto-enrichment: {len(missing_symbols)} new genes found")
+    print(f"   Missing: {', '.join(missing_symbols[:10])}{'...' if len(missing_symbols) > 10 else ''}")
+    
+    # Fetch gene info from Gemini API in parallel
+    gene_info_map = await batch_fetch_genes(missing_symbols)
+    
+    # Prepare data for bulk insert
+    genes_to_insert = [
+        {
+            "symbol": symbol,
+            "category": info["category"],
+            "description": info["description"]
+        }
+        for symbol, info in gene_info_map.items()
+    ]
+    
+    # Bulk insert into database
+    if genes_to_insert:
+        inserted_count = bulk_create_genes(db, genes_to_insert)
+        print(f"✓ Cached {inserted_count} new genes for future requests")
+
 
 # ============================================================================
 # PHASE 2: NETWORK CONSTRUCTION FROM STRING DB
@@ -366,12 +426,16 @@ async def analyze_ppi_network(request: GeneRequest, db: Session = Depends(get_db
     Main endpoint: Construct and analyze PPI network from seed genes.
     
     Workflow:
-    1. Fetch interactions from STRING DB
-    2. Build network graph
-    3. Perform topological analysis
-    4. Detect functional modules
-    5. Annotate nodes with gene categories from database
-    6. Return Cytoscape.js formatted results
+    1. Auto-enrich missing genes using Gemini API (cached in SQLite)
+    2. Fetch interactions from STRING DB
+    3. Build network graph
+    4. Perform topological analysis
+    5. Detect functional modules
+    6. Annotate nodes with gene categories from database
+    7. Return Cytoscape.js formatted results
+    
+    Note: Auto-enrichment adds a slight delay only on the *first* run for new genes.
+    Subsequent requests use cached database values for instant response.
     
     Example request:
     {
@@ -380,6 +444,9 @@ async def analyze_ppi_network(request: GeneRequest, db: Session = Depends(get_db
     }
     """
     try:
+        # Phase 1: Auto-enrich missing genes from Gemini API
+        await enrich_missing_genes(request.genes, db)
+        
         # Phase 2: Fetch interactions from STRING DB
         interactions, genes_found, genes_not_found = fetch_string_interactions(
             request.genes,
