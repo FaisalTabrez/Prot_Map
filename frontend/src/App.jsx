@@ -4,6 +4,7 @@ import { Dna, Network, Activity, Download, ChevronRight, Loader2, BarChart3, X, 
 import NetworkGraph from './components/NetworkGraph'
 import DataPanel from './components/DataPanel'
 import ReviewModal from './components/ReviewModal'
+import GeneDetailsPanel from './components/GeneDetailsPanel'
 import { cn } from './lib/utils'
 import './App.css'
 
@@ -34,6 +35,9 @@ function App() {
   const [showReviewModal, setShowReviewModal] = useState(false)
   const [reviewData, setReviewData] = useState(null)
   const [pendingAnalysisParams, setPendingAnalysisParams] = useState(null)
+
+  // Deep Dive state - for gene details panel
+  const [selectedGene, setSelectedGene] = useState(null)
 
   /**
    * Handle network construction and analysis
@@ -670,7 +674,11 @@ function App() {
               transition={{ duration: 0.8, delay: 0.5 }}
               className="w-full h-full pt-24 px-6 pb-6"
             >
-              <NetworkGraph elements={networkData} legend={legend} />
+              <NetworkGraph 
+                elements={networkData} 
+                legend={legend} 
+                onNodeClick={(geneSymbol) => setSelectedGene(geneSymbol)}
+              />
             </motion.div>
           ) : (
             <motion.div
@@ -710,6 +718,14 @@ function App() {
         newCategories={reviewData?.new_categories || []}
         onApprove={handleCategoryApproval}
         onCancel={handleCategoryCancel}
+      />
+
+      {/* ================================================================= */}
+      {/* GENE DETAILS PANEL - Deep Dive Feature */}
+      {/* ================================================================= */}
+      <GeneDetailsPanel 
+        symbol={selectedGene} 
+        onClose={() => setSelectedGene(null)}
       />
     </div>
   )

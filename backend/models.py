@@ -4,7 +4,7 @@ Database Models for PPI Network Explorer
 SQLAlchemy ORM models for gene metadata storage.
 """
 
-from sqlalchemy import Column, Integer, String, Index, ForeignKey
+from sqlalchemy import Column, Integer, String, Index, ForeignKey, JSON
 from sqlalchemy.orm import relationship
 from database import Base
 
@@ -52,6 +52,7 @@ class Gene(Base):
         category_id: Foreign key to Category table
         category_ref: Relationship to Category object
         description: Optional detailed description of gene function
+        extended_data: Cached clinical details from Gemini (JSON)
     """
     __tablename__ = "genes"
     
@@ -69,6 +70,10 @@ class Gene(Base):
     
     # Optional description
     description = Column(String, nullable=True)
+    
+    # Extended clinical data (cached from Gemini AI)
+    # Structure: {full_name, function_summary, disease_relevance, known_drugs, clinical_significance}
+    extended_data = Column(JSON, nullable=True)
     
     def __repr__(self):
         return f"<Gene(symbol='{self.symbol}', category_id={self.category_id})>"

@@ -15,7 +15,7 @@ import ProteinDetailsModal from './ProteinDetailsModal'
  * - Layout: COSE (physics-based) for natural clustering
  */
 
-function NetworkGraph({ elements, legend = {} }) {
+function NetworkGraph({ elements, legend = {}, onNodeClick }) {
   const cyRef = useRef(null)
   const [selectedGene, setSelectedGene] = useState(null)
 
@@ -233,6 +233,14 @@ function NetworkGraph({ elements, legend = {} }) {
 
       cy.on('unselect', 'node', () => {
         cy.elements().removeClass('dimmed')
+      })
+
+      // Listen for node tap events (Deep Dive feature)
+      cy.on('tap', 'node', (evt) => {
+        const nodeData = evt.target.data()
+        if (onNodeClick && nodeData.id) {
+          onNodeClick(nodeData.id)  // Pass gene symbol to parent
+        }
       })
 
       // Listen for export PNG event

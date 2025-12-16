@@ -101,19 +101,23 @@ def get_gene_category(gene_symbol: str, db: Session) -> str:
 
 async def enrich_missing_genes(gene_symbols: List[str], db: Session) -> Optional[Dict[str, Any]]:
     """
-    Auto-enrichment: Fetch metadata for genes not in database using Gemini API.
+    Auto-enrichment: Fetch metadata for genes not in database OR with "Unknown" category.
     
     Implements category review workflow:
+    - Identifies missing genes AND genes currently classified as "Unknown"
+    - Re-classifies "Unknown" genes using improved Gemini prompt
     - If AI suggests new categories not in DB, returns review data (doesn't save)
-    - If all categories exist, saves genes immediately and returns None
+    - If all categories exist, saves/updates genes immediately and returns None
     
     Workflow:
     1. Check which genes are missing from database
-    2. If missing genes found, query Gemini API in parallel
-    3. Extract unique categories from AI responses
-    4. Check if any new categories exist
-    5a. If new categories -> Return review data for frontend approval
-    5b. If all categories exist -> Bulk insert genes and return None
+    2. Check which genes exist but have category="Unknown"
+    3. Combine both lists → genes to fetch from Gemini
+    4. Query Gemini API in parallel for all genes needing classification
+    5. Extract unique categories from AI responses
+    6. Check if any new categories exist
+    7a. If new categories -> Return review data for frontend approval
+    7b. If all categories exist -> Bulk insert/update genes and return None
     
     Args:
         gene_symbols: List of gene symbols from user request
@@ -123,10 +127,12 @@ async def enrich_missing_genes(gene_symbols: List[str], db: Session) -> Optional
         None if successful auto-save
         Dict with review data if new categories detected:
         {
-            "new_categories": ["Ion Channel", "Cytokine"],
-            "pending_genes": [{"symbol": "...", "category": "...", "description": "..."}]
+            "new_categories": ["Ion Channel", "Hormone"],
+            "pending_genes": [{"symbol": "INS", "category": "Hormone", "description": "..."}]
         }
     """
+    from models import Gene, Category
+    
     # Normalize symbols to uppercase
     normalized_symbols = [s.upper() for s in gene_symbols]
     
@@ -134,18 +140,31 @@ async def enrich_missing_genes(gene_symbols: List[str], db: Session) -> Optional
     existing_genes = get_genes_by_symbols(db, normalized_symbols)
     existing_symbols = set(existing_genes.keys())
     
-    # Identify missing genes
+    # Identify MISSING genes (not in database at all)
     missing_symbols = [s for s in normalized_symbols if s not in existing_symbols]
     
-    if not missing_symbols:
-        print(f"✓ All {len(normalized_symbols)} genes found in database (cache hit)")
+    # Identify UNKNOWN genes (in database but category is "Unknown")
+    unknown_symbols = []
+    for symbol in existing_symbols:
+        gene = existing_genes[symbol]
+        if gene.category_ref and gene.category_ref.name == "Unknown":
+            unknown_symbols.append(symbol)
+    
+    # Combine both lists: genes to fetch from AI
+    genes_to_fetch = missing_symbols + unknown_symbols
+    
+    if not genes_to_fetch:
+        print(f"✓ All {len(normalized_symbols)} genes found with valid categories (cache hit)")
         return None
     
-    print(f"🔍 Auto-enrichment: {len(missing_symbols)} new genes found")
-    print(f"   Missing: {', '.join(missing_symbols[:10])}{'...' if len(missing_symbols) > 10 else ''}")
+    print(f"🔍 Auto-enrichment: {len(genes_to_fetch)} genes need classification")
+    if missing_symbols:
+        print(f"   Missing: {', '.join(missing_symbols[:10])}{'...' if len(missing_symbols) > 10 else ''}")
+    if unknown_symbols:
+        print(f"   Re-classifying Unknown: {', '.join(unknown_symbols[:10])}{'...' if len(unknown_symbols) > 10 else ''}")
     
     # Fetch gene info from Gemini API in parallel
-    gene_info_map = await batch_fetch_genes(missing_symbols)
+    gene_info_map = await batch_fetch_genes(genes_to_fetch)
     
     # Extract unique categories from AI responses
     ai_categories = set(info["category"] for info in gene_info_map.values())
@@ -177,23 +196,39 @@ async def enrich_missing_genes(gene_symbols: List[str], db: Session) -> Optional
             "pending_genes": pending_genes
         }
     
-    # All categories exist - proceed with auto-save
+    # All categories exist - proceed with auto-save/update
     print(f"✓ All categories exist in database")
     
-    # Prepare data for bulk insert (with category_id from existing categories)
-    genes_to_insert = [
-        {
-            "symbol": symbol,
-            "category_id": existing_categories[info["category"]].id,
-            "description": info["description"]
-        }
-        for symbol, info in gene_info_map.items()
-    ]
+    # Separate into INSERT (new genes) and UPDATE (unknown → reclassified)
+    genes_to_insert = []
+    genes_to_update = []
     
-    # Bulk insert into database
+    for symbol, info in gene_info_map.items():
+        category_id = existing_categories[info["category"]].id
+        
+        if symbol in missing_symbols:
+            # New gene - prepare for INSERT
+            genes_to_insert.append({
+                "symbol": symbol,
+                "category_id": category_id,
+                "description": info["description"]
+            })
+        elif symbol in unknown_symbols:
+            # Existing gene with Unknown - UPDATE it
+            gene = existing_genes[symbol]
+            gene.category_id = category_id
+            gene.description = info["description"]
+            genes_to_update.append(gene)
+    
+    # Bulk insert new genes
     if genes_to_insert:
         inserted_count = bulk_create_genes(db, genes_to_insert)
-        print(f"✓ Cached {inserted_count} new genes for future requests")
+        print(f"✓ Inserted {inserted_count} new genes")
+    
+    # Update re-classified genes
+    if genes_to_update:
+        db.commit()
+        print(f"✓ Re-classified {len(genes_to_update)} Unknown genes with new categories")
     
     return None
 
@@ -415,7 +450,7 @@ def analyze_network(interactions: List[Dict], genes_found: List[str], genes_not_
                 "degree": round(degree_centrality.get(node, 0), 4),
                 "betweenness": round(betweenness_centrality.get(node, 0), 4),
                 "module": node_to_module.get(node, 0),
-                "node_degree": G.degree(node),  # Actual number of connections
+                "node_degree": G.degree(node),  # type: ignore
                 "category": category  # Biological function from database
             }
         })
@@ -437,7 +472,7 @@ def analyze_network(interactions: List[Dict], genes_found: List[str], genes_not_
     
     # Top 5 Hub proteins (highest degree centrality)
     top_hubs = sorted(
-        [{"gene": gene, "degree": G.degree(gene), "centrality": degree_centrality[gene]} 
+        [{"gene": gene, "degree": G.degree(gene), "centrality": degree_centrality[gene]}  # type: ignore
          for gene in G.nodes()],
         key=lambda x: x['degree'],
         reverse=True
@@ -555,7 +590,7 @@ async def analyze_ppi_network(request: GeneRequest, db: Session = Depends(get_db
         # Phase 2: Fetch interactions from STRING DB
         interactions, genes_found, genes_not_found = fetch_string_interactions(
             request.genes,
-            request.confidence_threshold
+            request.confidence_threshold or 0.4
         )
         
         # Phase 3 & 4: Analyze network with database category annotation
@@ -636,7 +671,7 @@ async def confirm_new_categories(request: CategoryReviewRequest, db: Session = D
         # Step 4: Proceed with normal network analysis
         interactions, genes_found, genes_not_found = fetch_string_interactions(
             request.original_gene_list,
-            request.confidence_threshold
+            request.confidence_threshold or 0.4
         )
         
         analysis_results = analyze_network(interactions, genes_found, genes_not_found, db)
@@ -662,7 +697,7 @@ async def upload_gene_file(file: UploadFile = File(...)):
     try:
         # Validate file type
         allowed_extensions = ['.xlsx', '.xls', '.csv', '.tsv', '.txt', '.tab']
-        if not any(file.filename.endswith(ext) for ext in allowed_extensions):
+        if not file.filename or not any(file.filename.endswith(ext) for ext in allowed_extensions):
             raise HTTPException(
                 status_code=400,
                 detail=f"Unsupported file type. Allowed: {', '.join(allowed_extensions)}"
@@ -672,7 +707,7 @@ async def upload_gene_file(file: UploadFile = File(...)):
         content = await file.read()
         
         # Parse genes from file
-        genes = parse_gene_file(content, file.filename)
+        genes = parse_gene_file(content, file.filename)  # type: ignore
         
         if not genes:
             raise HTTPException(
@@ -887,6 +922,100 @@ async def get_drug_interactions(gene_symbol: str):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching drug data: {str(e)}")
+
+
+@app.get("/gene/{symbol}/details")
+async def get_gene_details(symbol: str, db: Session = Depends(get_db)):
+    """
+    Fetch comprehensive clinical details for a gene.
+    
+    **Deep Dive Feature:** Returns detailed clinical information including:
+    - Full gene name
+    - Function summary
+    - Disease relevance
+    - Known drug interactions
+    - Clinical significance rating
+    
+    **Cache-First Strategy:**
+    1. Check if extended_data exists in database
+    2. If cached, return immediately (instant response)
+    3. If not cached, fetch from Gemini AI (~1.5s)
+    4. Save to database for future requests
+    5. Return clinical details
+    
+    This endpoint is optimized for the node click "Deep Dive" feature,
+    ensuring the first click takes ~1.5s but all subsequent clicks are instant.
+    
+    Args:
+        symbol: Gene symbol (e.g., 'TP53', 'EGFR', 'INS')
+        db: Database session (injected)
+    
+    Returns:
+        JSON with clinical details:
+        {
+            "symbol": "TP53",
+            "full_name": "Tumor Protein p53",
+            "function_summary": "...",
+            "disease_relevance": "...",
+            "known_drugs": ["Drug1", "Drug2", ...],
+            "clinical_significance": "High",
+            "cached": true/false
+        }
+    
+    Raises:
+        HTTPException 404: Gene not found in database
+        HTTPException 503: Gemini API error
+        HTTPException 500: Internal server error
+    """
+    from ai_service import fetch_extended_details
+    from models import Gene
+    
+    # Normalize symbol
+    symbol = symbol.upper().strip()
+    
+    # Query database for gene
+    gene = db.query(Gene).filter(Gene.symbol == symbol).first()
+    
+    if not gene:
+        raise HTTPException(
+            status_code=404, 
+            detail=f"Gene '{symbol}' not found in database. Please analyze a network containing this gene first."
+        )
+    
+    # Check if extended_data is cached
+    if gene.extended_data is not None:  # type: ignore
+        print(f"✓ Cache hit: {symbol} extended details")
+        return {
+            "symbol": symbol,
+            **gene.extended_data,  # type: ignore
+            "cached": True
+        }
+    
+    # Cache miss - fetch from Gemini
+    print(f"🔍 Cache miss: Fetching extended details for {symbol} from Gemini...")
+    
+    try:
+        # Fetch from AI
+        extended_details = await fetch_extended_details(symbol)
+        
+        # Save to database
+        gene.extended_data = extended_details  # type: ignore
+        db.commit()
+        
+        print(f"✓ Cached extended details for {symbol}")
+        
+        return {
+            "symbol": symbol,
+            **extended_details,
+            "cached": False
+        }
+        
+    except ValueError as e:
+        raise HTTPException(status_code=503, detail=f"AI service configuration error: {str(e)}")
+    except Exception as e:
+        print(f"❌ Error fetching extended details for {symbol}: {e}")
+        raise HTTPException(status_code=503, detail=f"Failed to fetch clinical details from AI service: {str(e)}")
+
 
 # ============================================================================
 # DEVELOPMENT SERVER

@@ -1,14 +1,40 @@
 # PPI Network Explorer
 
-**Professional Protein-Protein Interaction Network Analysis Platform**
+**AI-Powered Disease-Agnostic Protein Network Analysis Platform**
 
-A comprehensive full-stack bioinformatics tool featuring dark-mode interface, interactive visualizations, drug target discovery, and multi-format export capabilities for disease-associated protein network research.
+A comprehensive full-stack bioinformatics tool featuring AI-powered gene classification, deep clinical insights, interactive visualizations, and advanced drug target discovery for cross-domain biological research.
 
 ---
 
-## Features
+## 🚀 Key Features
 
-### Core Workflow
+### 🧬 **NEW: Disease-Agnostic Platform**
+- **Category Review System**: Dynamically expand beyond cancer to ANY biological domain
+  - Neuroscience (Ion Channels, Neurotransmitters)
+  - Immunology (Cytokines, Chemokines)
+  - Metabolism (Enzymes, Hormones, Transporters)
+  - Cardiovascular, Rare Diseases, and more
+- **AI-Powered Classification**: Google Gemini automatically categorizes genes with expert biological knowledge
+- **User Approval Workflow**: Review and approve new gene categories before they're added to the database
+- **Self-Healing Database**: Automatically enriches missing gene metadata and improves classification over time
+
+### 🔬 **NEW: Deep Dive Clinical Insights**
+- **Click Any Gene Node** to open a sleek sliding panel with:
+  - **Full Gene Name**: Official nomenclature
+  - **Function Summary**: Primary biological role (2 sentences)
+  - **Disease Relevance**: Clinical pathology and disease associations
+  - **Drug Interactions**: FDA-approved drugs and targeted therapies (styled as interactive badges)
+  - **Clinical Significance**: High/Moderate/Low rating with color-coded badges
+- **Smart Caching**: First click queries AI (~1.5s), subsequent clicks are instant
+- **Glassmorphic UI**: Beautiful bioluminescent theme with smooth animations
+
+### 📊 **Dynamic Gene Function Legend**
+- Automatically generated from database categories present in your network
+- Color-coded badges showing functional categories
+- Scrollable for networks with many categories
+- Updates dynamically as you analyze different networks
+
+### 🎯 Core Workflow
 #### Phase 1: Gene Input & Preparation
 - **Disease/Condition Context**: Required disease name input for contextual analysis
 - **Flexible Input Methods**:
@@ -77,6 +103,12 @@ A comprehensive full-stack bioinformatics tool featuring dark-mode interface, in
 Prot_Map/
 ├── backend/                      # Python FastAPI server
 │   ├── main.py                  # API endpoints, network analysis
+│   ├── ai_service.py            # NEW: Google Gemini integration
+│   ├── models.py                # NEW: SQLAlchemy ORM models (Gene, Category)
+│   ├── database.py              # NEW: Database CRUD operations
+│   ├── seed_genes.py            # Database initialization script
+│   ├── migrate_add_extended_data.py  # Database migration utility
+│   ├── genes.db                 # SQLite database (auto-created)
 │   ├── requirements.txt         # Python dependencies
 │   └── venv/                    # Virtual environment
 │
@@ -86,7 +118,9 @@ Prot_Map/
 │   │   ├── components/
 │   │   │   ├── NetworkGraph.jsx        # Cytoscape visualization
 │   │   │   ├── DataPanel.jsx           # Collapsible analysis panel
-│   │   │   └── ProteinDetailsModal.jsx # Node details & drug info
+│   │   │   ├── ProteinDetailsModal.jsx # Node details & drug info
+│   │   │   ├── ReviewModal.jsx         # NEW: Category approval modal
+│   │   │   └── GeneDetailsPanel.jsx    # NEW: Deep Dive clinical insights
 │   │   ├── lib/
 │   │   │   └── utils.js                # Utility functions (cn)
 │   │   ├── App.css                     # Dark theme styles
@@ -99,6 +133,8 @@ Prot_Map/
 │   └── postcss.config.js
 │
 ├── README.md                    # This file
+├── DEEP_DIVE_TESTING.md        # Deep Dive feature testing guide
+├── CATEGORY_REVIEW_SYSTEM.md   # Category Review System documentation
 ├── NEW_FEATURES.md             # Detailed feature documentation
 └── QUICK_START_GUIDE.md        # User guide with examples
 ```
@@ -110,7 +146,25 @@ Prot_Map/
 ### Prerequisites
 - **Python 3.8+**
 - **Node.js 18+** and npm
+- **Google Gemini API Key** (required for AI features)
 - Internet connection (for STRING DB API)
+
+---
+
+### Environment Setup
+
+1. **Get Gemini API Key** (FREE):
+   - Visit https://aistudio.google.com/app/apikey
+   - Sign in with Google account
+   - Click "Create API Key"
+   - Copy your key
+
+2. **Create `.env` file in `backend/` directory**:
+   ```bash
+   cd backend
+   echo "GEMINI_API_KEY=your_api_key_here" > .env
+   ```
+   Replace `your_api_key_here` with your actual Gemini API key
 
 ---
 
@@ -140,14 +194,25 @@ Prot_Map/
    **Dependencies installed:**
    - `fastapi>=0.124.0` - Web framework
    - `uvicorn>=0.38.0` - ASGI server
+   - `sqlalchemy>=2.0.0` - **NEW**: ORM for database
+   - `google-generativeai` - **NEW**: Gemini AI integration
+   - `python-dotenv` - **NEW**: Environment variable management
    - `networkx>=3.6.0` - Graph analysis
    - `pandas>=2.2.0` - Data manipulation
    - `requests>=2.32.0` - HTTP requests
    - `openpyxl>=3.1.0` - Excel file support
 
-4. **Start the FastAPI server:**
+4. **Initialize the database:**
+   ```bash
+   python seed_genes.py
+   ```
+   This creates the SQLite database with initial categories and seed genes.
+
+5. **Start the FastAPI server:**
    ```bash
    python main.py
+   # OR
+   python -m uvicorn main:app --reload --host 0.0.0.0 --port 8000
    ```
 
   Backend running at: `http://localhost:8000`
@@ -189,31 +254,45 @@ Prot_Map/
 
 ### 1. Input Phase
 - Open `http://localhost:5173` in your browser
-- **Enter Disease/Condition Name** (required): e.g., "Breast Cancer"
+- **Enter Disease/Condition Name** (required): e.g., "Breast Cancer", "Diabetes", "Parkinson's Disease"
 - **Choose Input Method**:
   - **Manual Entry**: Paste gene symbols (one per line or comma-separated)
   - **File Upload**: Click "Upload File" and select Excel/CSV/TSV file
 - Example genes: `TP53, BRCA1, EGFR, AKT1, PTEN, MYC`
 - Or click **"Load Example (Breast Cancer)"** for a demo dataset
 
-### 2. Network Construction
+### 2. Network Construction & AI Enrichment
 - Click **"Generate Network"**
 - The system will:
+  - **Auto-Enrich Missing Genes**: Query Gemini AI for genes not in database
+  - **Category Review**: If new categories are detected, a modal appears for approval
+    - Review new categories (e.g., "Hormone", "Enzyme", "Ion Channel")
+    - Approve to add them to the database
+    - Cancel to reject and skip those genes
   - Query STRING DB for protein interactions
   - Build the network graph with confidence filtering
   - Perform topological analysis (centrality metrics)
   - Detect functional modules
-  - Display genes not found (if any)
+  - Generate dynamic legend from database categories
 
 ### 3. Explore Network
 - **Graph Visualization**:
   - **Larger nodes** = Hub proteins (many connections)
-  - **Different colors** = Different functional modules
-  - **Click nodes** to view detailed protein & drug information
+  - **Node colors** = Biological function categories from database
+  - **Dynamic Legend**: Shows only categories present in your network
+  - **Click nodes** to open Deep Dive panel with clinical insights
   - **Scroll to zoom**, drag to pan
   - Use zoom controls in the corner
 
-- **Protein Details Modal** (click any node):
+- **🆕 Deep Dive Panel** (click any node):
+  - Sleek sidebar slides in from right
+  - **Clinical Significance Badge**: High/Moderate/Low with color coding
+  - **Function Section**: Primary biological role
+  - **Disease Relevance**: Clinical pathology and disease associations
+  - **Drug Interactions**: Interactive drug badges (cyan gradient pills)
+  - **Smart Caching**: First click ~1.5s (AI fetch), subsequent clicks instant
+
+- **Protein Details Modal** (from legacy feature):
   - **Info Tab**: Protein description, external links (NCBI, UniProt, STRING)
   - **Drug Targets Tab**: Known drugs, interaction types, druggability status
 
@@ -222,7 +301,31 @@ Prot_Map/
   - **Bottlenecks Tab**: Top 5 proteins by betweenness centrality
   - **Modules Tab**: Detected functional clusters
 
-### 4. Export Results
+### 4. Cross-Domain Analysis (NEW!)
+Try analyzing different biological domains:
+
+**Metabolic Diseases:**
+```
+Disease: Type 2 Diabetes
+Genes: INS, GCK, PPARG, IRS1, SLC2A4, PDX1, HNF4A
+Expected Categories: Hormone, Enzyme, Transcription Factor, Transporter
+```
+
+**Neuroscience:**
+```
+Disease: Alzheimer's Disease  
+Genes: APP, PSEN1, PSEN2, APOE, MAPT, BACE1, SNCA
+Expected Categories: Enzyme, Structural Protein, Receptor
+```
+
+**Immunology:**
+```
+Disease: Rheumatoid Arthritis
+Genes: TNF, IL6, IL1B, CTLA4, PTPN22, HLA-DRB1
+Expected Categories: Cytokine, Immune Regulator, MHC Protein
+```
+
+### 5. Export Results
 - Click **"Export"** button in header
 - Choose format:
   - **CSV Report**: Multi-section spreadsheet (nodes, edges, hubs, bottlenecks, stats)
@@ -842,7 +945,9 @@ gunicorn main:app --workers 4 --worker-class uvicorn.workers.UvicornWorker
 ## Development
 
 ### Project Structure
-- **Backend**: FastAPI REST API with NetworkX analysis engine
+- **Backend**: FastAPI REST API with NetworkX analysis + SQLAlchemy ORM
+- **Database**: SQLite with Gene and Category models
+- **AI Service**: Google Gemini for intelligent gene classification
 - **Frontend**: React SPA with Vite build system
 - **Communication**: JSON over HTTP with CORS enabled
 - **State Management**: React hooks (useState, useEffect)
@@ -850,15 +955,19 @@ gunicorn main:app --workers 4 --worker-class uvicorn.workers.UvicornWorker
 
 ### Key Components
 - **App.jsx**: Main application logic, state management, API calls
-- **NetworkGraph.jsx**: Cytoscape visualization with event handlers
+- **NetworkGraph.jsx**: Cytoscape visualization with node tap events
 - **DataPanel.jsx**: Collapsible analysis results panel
 - **ProteinDetailsModal.jsx**: Protein info and drug target modal
+- **ReviewModal.jsx**: **NEW** - Category approval workflow
+- **GeneDetailsPanel.jsx**: **NEW** - Deep Dive clinical insights panel
 
 ### API Endpoints Flow
-1. User inputs genes → `POST /analyze` → Network construction
-2. User uploads file → `POST /upload-genes` → Gene extraction
-3. User clicks node → `GET /protein/{gene}` + `GET /drugs/{gene}` → Modal display
-4. User exports → `POST /export/csv` or `/export/json` → File download
+1. User inputs genes → `POST /analyze` → Network construction + AI enrichment
+2. AI detects new categories → Review modal → `POST /confirm-categories` → Database update
+3. User clicks node → `GET /gene/{symbol}/details` → Deep Dive panel (cached)
+4. User uploads file → `POST /upload-genes` → Gene extraction
+5. Legacy: User clicks node → `GET /protein/{gene}` + `GET /drugs/{gene}` → Modal display
+6. User exports → `POST /export/csv` or `/export/json` → File download
 
 ### Performance Optimizations
 - React component memoization
@@ -867,13 +976,51 @@ gunicorn main:app --workers 4 --worker-class uvicorn.workers.UvicornWorker
 - Streaming responses for large exports
 - Client-side PNG generation (no backend load)
 
-**Version**: 2.0.0  
-**Last Updated**: December 2025
+**Version**: 3.0.0 🚀 **AI-Powered & Disease-Agnostic**  
+**Last Updated**: December 16, 2025
+
+---
+
+## 🆕 What's New in v3.0
+
+### Major Features
+1. **🧬 Disease-Agnostic Platform**
+   - Expanded beyond cancer to support ANY biological domain
+   - Category Review System for user-approved gene classifications
+   - Database now supports: Metabolism, Neuroscience, Immunology, Cardiovascular, and more
+
+2. **🤖 AI-Powered Gene Classification**
+   - Google Gemini integration for intelligent gene categorization
+   - Expert biologist prompting with priority category lists
+   - Automatic re-evaluation of "Unknown" genes
+   - Self-healing database that improves over time
+
+3. **🔬 Deep Dive Clinical Insights**
+   - Click any gene to see comprehensive clinical information
+   - AI-generated function summaries and disease relevance
+   - FDA-approved drug interactions with interactive badges
+   - Clinical significance ratings (High/Moderate/Low)
+   - Smart caching for instant subsequent access
+
+4. **📊 Dynamic Gene Function Legend**
+   - Automatically generated from database categories
+   - Updates dynamically per network
+   - Color-coded for easy identification
+   - Scrollable for large category lists
+
+### Technical Improvements
+- SQLAlchemy ORM with SQLite database
+- Category and Gene models with foreign key relationships
+- Async AI service with batch fetching
+- Database migration utilities
+- Type-safe Python backend with Pylance compatibility
+- Enhanced error handling and validation
 
 ---
 
 ## Acknowledgments
 
+- **Google AI Studio** for Gemini API access and advanced language models
 - **STRING Database** team for comprehensive PPI data and API access
 - **DGIdb** team for drug-gene interaction data
 - **NetworkX** developers for graph analysis algorithms
