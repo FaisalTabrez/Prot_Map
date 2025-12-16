@@ -451,6 +451,38 @@ def analyze_network(interactions: List[Dict], genes_found: List[str], genes_not_
         reverse=True
     )[:5]
     
+    # ========================================================================
+    # BUILD DYNAMIC LEGEND
+    # ========================================================================
+    
+    # Extract unique categories from the network nodes
+    unique_categories = set()
+    for elem in elements:
+        if "data" in elem and "category" in elem["data"]:
+            category = elem["data"]["category"]
+            if category:  # Skip None/empty values
+                unique_categories.add(category)
+    
+    # Query database for category colors
+    from models import Category
+    legend = {}
+    
+    if unique_categories:
+        # Get categories from database
+        categories = db.query(Category).filter(
+            Category.name.in_(list(unique_categories))
+        ).all()
+        
+        # Build legend mapping: category_name -> color
+        for cat in categories:
+            legend[cat.name] = cat.color
+    
+    # Add "Unknown" category if any nodes have it
+    if "Unknown" in unique_categories:
+        legend["Unknown"] = "#64748b"  # Slate grey for unknown genes
+    
+    print(f"✓ Generated legend with {len(legend)} categories")
+    
     return {
         "elements": elements,
         "stats": {
@@ -463,7 +495,8 @@ def analyze_network(interactions: List[Dict], genes_found: List[str], genes_not_
             "genes_not_found": len(genes_not_found)
         },
         "genes_found": genes_found,
-        "genes_not_found": genes_not_found
+        "genes_not_found": genes_not_found,
+        "legend": legend  # Dynamic legend based on categories present in network
     }
 
 # ============================================================================

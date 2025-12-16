@@ -28,6 +28,7 @@ function App() {
   const [genesNotFound, setGenesNotFound] = useState([])
   const [uploadedFileName, setUploadedFileName] = useState('')
   const [showExportMenu, setShowExportMenu] = useState(false)
+  const [legend, setLegend] = useState(null)
 
   // Category review state
   const [showReviewModal, setShowReviewModal] = useState(false)
@@ -119,6 +120,7 @@ function App() {
       setNetworkData(data.elements)
       setStats(data.stats)
       setGenesNotFound(data.genes_not_found || [])
+      setLegend(data.legend || {})
       setShowDataPanel(true)
 
     } catch (err) {
@@ -171,6 +173,7 @@ function App() {
       setNetworkData(data.elements)
       setStats(data.stats)
       setGenesNotFound(data.genes_not_found || [])
+      setLegend(data.legend || {})
       setShowDataPanel(true)
 
       // Clear review data
@@ -667,7 +670,7 @@ function App() {
               transition={{ duration: 0.8, delay: 0.5 }}
               className="w-full h-full pt-24 px-6 pb-6"
             >
-              <NetworkGraph elements={networkData} />
+              <NetworkGraph elements={networkData} legend={legend} />
             </motion.div>
           ) : (
             <motion.div

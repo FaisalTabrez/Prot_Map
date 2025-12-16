@@ -15,17 +15,14 @@ import ProteinDetailsModal from './ProteinDetailsModal'
  * - Layout: COSE (physics-based) for natural clustering
  */
 
-function NetworkGraph({ elements }) {
+function NetworkGraph({ elements, legend = {} }) {
   const cyRef = useRef(null)
   const [selectedGene, setSelectedGene] = useState(null)
 
-  // Biological function color palette (Neon/Glossy style for dark theme)
+  // Dynamic color palette from backend (with fallback for unknown categories)
   const CATEGORY_COLORS = {
-    "Tumor Suppressor": "#ff3333",     // Neon Red
-    "Oncogene": "#00ff88",             // Neon Green
-    "Kinase": "#ffaa00",               // Neon Orange
-    "Transcription Factor": "#bc13fe", // Neon Purple
-    "Unknown": "#64748b"               // Slate Grey (fallback)
+    ...legend,
+    "Unknown": legend["Unknown"] || "#64748b"  // Ensure Unknown always has a color
   }
 
   // Fallback module colors for uncategorized genes
@@ -362,26 +359,38 @@ function NetworkGraph({ elements }) {
         </motion.button>
       </div>
 
-      {/* Function-Based Color Legend */}
-      <div className="absolute bottom-4 left-4 bg-black/50 backdrop-blur-lg border border-white/10 rounded-lg p-3 shadow-2xl">
+      {/* Dynamic Function-Based Color Legend */}
+      <div className="absolute bottom-4 left-4 bg-black/50 backdrop-blur-lg border border-white/10 rounded-lg p-3 shadow-2xl max-w-xs">
         <h4 className="text-xs font-bold text-white/90 mb-2">Gene Functions</h4>
-        <div className="space-y-1.5 text-xs">
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full shadow-lg" style={{ backgroundColor: CATEGORY_COLORS["Tumor Suppressor"], boxShadow: `0 0 8px ${CATEGORY_COLORS["Tumor Suppressor"]}` }}></div>
-            <span className="text-white/80">Tumor Suppressor / DNA Repair</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full shadow-lg" style={{ backgroundColor: CATEGORY_COLORS["Oncogene"], boxShadow: `0 0 8px ${CATEGORY_COLORS["Oncogene"]}` }}></div>
-            <span className="text-white/80">Oncogene / Growth Factor</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full shadow-lg" style={{ backgroundColor: CATEGORY_COLORS["Kinase"], boxShadow: `0 0 8px ${CATEGORY_COLORS["Kinase"]}` }}></div>
-            <span className="text-white/80">Kinase / Signaling</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full shadow-lg" style={{ backgroundColor: CATEGORY_COLORS["Transcription Factor"], boxShadow: `0 0 8px ${CATEGORY_COLORS["Transcription Factor"]}` }}></div>
-            <span className="text-white/80">Cell Cycle / Transcription</span>
-          </div>
+        <div className="space-y-1.5 text-xs max-h-48 overflow-y-auto custom-scrollbar">
+          {Object.entries(CATEGORY_COLORS)
+            .filter(([category]) => category !== 'Unknown')  // Show Unknown last
+            .sort(([a], [b]) => a.localeCompare(b))  // Alphabetical order
+            .map(([category, color]) => (
+              <div key={category} className="flex items-center gap-2">
+                <div 
+                  className="w-3 h-3 rounded-full shadow-lg flex-shrink-0" 
+                  style={{ 
+                    backgroundColor: color, 
+                    boxShadow: `0 0 8px ${color}` 
+                  }}
+                ></div>
+                <span className="text-white/80 truncate">{category}</span>
+              </div>
+            ))
+          }
+          {CATEGORY_COLORS['Unknown'] && (
+            <div className="flex items-center gap-2 opacity-60">
+              <div 
+                className="w-3 h-3 rounded-full shadow-lg flex-shrink-0" 
+                style={{ 
+                  backgroundColor: CATEGORY_COLORS['Unknown'], 
+                  boxShadow: `0 0 8px ${CATEGORY_COLORS['Unknown']}` 
+                }}
+              ></div>
+              <span className="text-white/80">Unknown</span>
+            </div>
+          )}
           <div className="pt-1.5 mt-1.5 border-t border-white/10 text-emerald-400 text-[10px]">
             💡 Node size = Degree centrality
           </div>
