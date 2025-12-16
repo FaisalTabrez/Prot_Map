@@ -1,0 +1,21 @@
+# PPI Network Explorer - Backend Dependencies
+# ================================================
+
+# Web Framework
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+pydantic>=2.5.3
+
+# HTTP Requests
+requests>=2.31.0
+
+# Network Analysis
+networkx>=3.2.1
+
+# Data Processing (using newer versions with pre-built wheels)
+pandas>=2.2.0
+numpy>=1.26.0
+openpyxl>=3.1.0
+
+# File Upload Support
+python-multipart>=0.0.6

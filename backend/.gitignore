@@ -1,0 +1,25 @@
+# Ignore Python virtual environment
+venv/
+env/
+*.pyc
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Ignore backend specific
+.env
+.venv
+*.db
+*.sqlite3
+.pytest_cache/
+.coverage
+
+# Ignore OS files
+.DS_Store
+Thumbs.db
+
+# Ignore IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
