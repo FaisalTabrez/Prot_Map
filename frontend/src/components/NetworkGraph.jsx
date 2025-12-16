@@ -60,14 +60,13 @@ function NetworkGraph({ elements }) {
           return Math.max(35, Math.min(90, 35 + degree * 120))
         },
 
-        // Bioluminescent color mapping: hubs, bottlenecks, regular nodes
+        // Color mapping: strictly by module (cluster ID)
         'background-color': (ele) => {
-          const degree = ele.data('degree') || 0
-          const betweenness = ele.data('betweenness') || 0
-          // Determine hubs by degree threshold, bottlenecks by betweenness
-          if (degree >= 0.6) return '#F72585' // Neon Pink/Magenta for hubs
-          if (betweenness >= 0.18) return '#7209B7' // Vibrant Purple for bottlenecks
-          return '#4CC9F0' // Electric Blue/Cyan for regular nodes
+          const mod = ele.data('module')
+          if (mod === 0) return '#4CC9F0' // Neon Cyan - DNA Repair
+          if (mod === 1) return '#F72585' // Neon Pink - Cell Growth
+          if (mod === 2) return '#7209B7' // Neon Purple
+          return '#64748b' // Slate Grey - unclustered nodes
         },
 
         // Glossy white highlight border
@@ -81,11 +80,11 @@ function NetworkGraph({ elements }) {
           return 10 + Math.min(40, Math.floor(degree * 50))
         },
         'shadow-color': (ele) => {
-          const degree = ele.data('degree') || 0
-          const betweenness = ele.data('betweenness') || 0
-          if (degree >= 0.6) return '#F72585'
-          if (betweenness >= 0.18) return '#7209B7'
-          return '#4CC9F0'
+          const mod = ele.data('module')
+          if (mod === 0) return '#4CC9F0'
+          if (mod === 1) return '#F72585'
+          if (mod === 2) return '#7209B7'
+          return '#64748b'
         },
         'shadow-opacity': 0.85,
       }
